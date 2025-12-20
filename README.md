@@ -1,6 +1,6 @@
 # yeah-yeah url shortener
 
-Basically is somewhat of an urlshortener.
+Basically, it is somewhat of a URL shortener.
 
 ## run 
 
