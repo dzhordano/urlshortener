@@ -1,0 +1,177 @@
+openapi: "3.0.0"
+info:
+  title: "Url Shortener API"
+  version: "1.0.0"
+  description: "Shorten your url bruv"
+  license:
+    name: "MIT"
+    url: "https://opensource.org/licenses/MIT"
+tags:
+  - name: "urlshortener"
+    description: "URL Shortener lolz"
+  # servers:
+  # - url: "https://api.example.com/v1"
+  #   description: "Production server"
+  # - url: "https://staging-api.example.com/v1"
+  #   description: "Staging server"
+security:
+  - ApiKeyAuth: []
+paths:
+  /api/v1/shorten:
+    post:
+      operationId: "shortenURL"
+      summary: "Shorten URL"
+      description: "Creates a shortened string url"
+      security: []
+      tags:
+        - "urlshortener"
+      requestBody:
+        description: "Request to shorten url to string"
+        content:
+          application/json:
+            schema:
+              type: "object"
+              properties:
+                url:
+                  type: "string"
+                  description: "url to shorten"
+              required:
+                - "url"
+        required: true
+      responses:
+        "200":
+          description: "Returns shortened url"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  short_url:
+                    type: "string"
+                    description: "Shortened url"
+        "400":
+          $ref: "#/components/responses/BadRequestResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
+  /api/v1/{token}:
+    get:
+      operationId: "redirect"
+      summary: "Redirect to original url using provided token (using short url)"
+      description: "Redirects to original url to which token is leading. This WON'T WORK through swagger-ui (unless i fix it)"
+      security: []
+      parameters:
+        - in: path
+          name: token
+          schema:
+            type: "string"
+          required: true
+          description: "Redirect token"
+      tags:
+        - "urlshortener"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequestResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
+  /api/v1/{token}/info:
+    get:
+      operationId: "getShortenedURLInfo"
+      summary: "Returns info about shortened url"
+      description: "Will return info about shortened url"
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: token
+          schema:
+            type: "string"
+          required: true
+          description: "Redirect token"
+      tags:
+        - "urlshortener"
+      responses:
+        "200":
+          $ref: "#/components/responses/UrlResponse"
+        "400":
+          $ref: "#/components/responses/BadRequestResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
+components:
+  schemas:
+    URL:
+      type: "object"
+      properties:
+        original_url:
+          type: "string"
+          format: "string"
+          description: "Original URL"
+        short_url:
+          type: "string"
+          format: "string"
+          description: "Shortened URL"
+        clicks:
+          type: "integer"
+          description: "Amount of clicks"
+        created_at_utc:
+          type: "string"
+          format: "date-time"
+          description: "Shortened URL creation date"
+    Error:
+      type: "object"
+      properties:
+        code:
+          type: "string"
+          description: "Error code"
+        message:
+          type: "string"
+          description: "Human-readable error message"
+      title: "Error"
+      required:
+        - "code"
+        - "message"
+      description: "Error response"
+  responses:
+    UrlResponse:
+      description: "Shortened url details"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/URL"
+    OKResponse:
+      description: "OK"
+    BadRequestResponse:
+      description: "Bad request - validation error"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UnauthorizedResponse:
+      description: "Unauthorized - authentication required"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFoundResponse:
+      description: "Resource not found"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ConflictResponse:
+      description: "Conflict"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  securitySchemes:
+    ApiKeyAuth:
+      type: "apiKey"
+      description: "API key for authentication"
+      name: "X-Api-Key"
+      in: "header"
