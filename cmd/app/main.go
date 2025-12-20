@@ -268,8 +268,6 @@ func initTracer(
 	ctx context.Context,
 	serviceName, jaegerURL, environment string,
 ) (*sdktrace.TracerProvider, error) {
-	// Init jaeger exporter
-	// TODO Could use different logger (?). Also could (and probably should) use otel collector
 	exp, err := otlptracehttp.New(
 		ctx,
 		otlptracehttp.WithEndpoint(jaegerURL),
