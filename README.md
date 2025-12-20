@@ -14,7 +14,7 @@ Basically, it is somewhat of a URL shortener.
 
 http docs are in `/api` dir
 
-#### todos and possible improvements :(
+#### todos and possible improvements
 
 - `_test` postfix in test files (increasing some tech debt here)
 - http server configuration (and impl https i guess)
@@ -22,6 +22,7 @@ http docs are in `/api` dir
 - postgres setup (and redis?)
 - possibility to run profiler
 - cors issue with swagger ui (specifically the 'redirect' method)
+- grafana dashboards are kind of bad ;_;
 
 #### some faq
 
