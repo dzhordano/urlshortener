@@ -75,7 +75,7 @@ func TestShortenURLCommandHandler_InvalidCommand(t *testing.T) {
 	ch, _ := NewShortenURLCommandHandler(l, cm, rm)
 	resp, err := ch.Handle(ctx, cmd)
 
-	require.ErrorIs(t, errs.ErrValueIsRequired, err)
+	require.ErrorIs(t, err, errs.ErrValueIsRequired)
 	assert.Empty(t, resp)
 }
 
