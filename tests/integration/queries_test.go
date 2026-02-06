@@ -17,10 +17,11 @@ func (s *Suite) TestGetURLInfoQueryHandler_Found() {
 
 	// Save shortened url before retrieval
 	shortenedURL := &model.ShortenedURL{
-		OriginalURL:  "http://example.com",
-		ShortURL:     "SOMEURL",
-		Clicks:       1,
-		CreatedAtUTC: time.Now().UTC(),
+		OriginalURL:   "http://example.com",
+		ShortURL:      "SOMEURL",
+		Clicks:        1,
+		CreatedAtUTC:  time.Now().UTC(),
+		ValidUntilUTC: time.Now().UTC(),
 	}
 	err := s.urlRepo.Save(ctx, shortenedURL)
 	s.Require().NoError(err)
@@ -44,6 +45,7 @@ func (s *Suite) TestGetURLInfoQueryHandler_Found() {
 	s.Equal(resp.CreatedAtUTC.Day(), valueFromDB.CreatedAtUTC.Day())
 	s.Equal(resp.CreatedAtUTC.Minute(), valueFromDB.CreatedAtUTC.Minute())
 	s.Equal(resp.CreatedAtUTC.Second(), valueFromDB.CreatedAtUTC.Second())
+	s.Equal(resp.ValidUntilUTC.Second(), valueFromDB.ValidUntilUTC.Second())
 
 	// No need to check cache since no cache is used in this method
 }
@@ -75,10 +77,11 @@ func (s *Suite) TestRedirect_Found() {
 	}
 
 	shortenedURL := &model.ShortenedURL{
-		OriginalURL:  "http://example.com",
-		ShortURL:     "SOMEURL",
-		Clicks:       1,
-		CreatedAtUTC: time.Now().UTC(),
+		OriginalURL:   "http://example.com",
+		ShortURL:      "SOMEURL",
+		Clicks:        1,
+		CreatedAtUTC:  time.Now().UTC(),
+		ValidUntilUTC: time.Now().UTC().Add(10 * time.Minute),
 	}
 	err := s.urlRepo.Save(ctx, shortenedURL)
 	s.Require().NoError(err)

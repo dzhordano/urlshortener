@@ -34,4 +34,5 @@ func (s *Suite) TestShortenURLCommandHandler_Success() {
 	s.Equal(0, valueFromDB.Clicks)
 	// Check if time isn't a nil value
 	s.NotEmpty(valueFromDB.CreatedAtUTC)
+	s.NotEmpty(valueFromDB.ValidUntilUTC)
 }
