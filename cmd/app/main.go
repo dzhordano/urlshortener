@@ -76,7 +76,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("error creating pgxpool: %v", err)
 	}
-	cr.RegisterCloseFn(func(ctx context.Context) error {
+	cr.RegisterCloseFn(func(_ context.Context) error {
 		pool.Close()
 		return nil
 	})
@@ -97,7 +97,7 @@ func main() {
 	}
 
 	rdb := newRedisClient(cfg.RDB.Addr(), cfg.RDB.Password)
-	cr.RegisterCloseFn(func(ctx context.Context) error {
+	cr.RegisterCloseFn(func(_ context.Context) error {
 		return rdb.Close()
 	})
 
@@ -134,9 +134,12 @@ func main() {
 	}
 
 	// Schedule so cleaning happens every 5 minutes.
-	// TODO Hardcoded, could move to config.
-	if err := cs.ScheduleInterval(ctx, cleanExpURLsTask, 5*time.Minute); err != nil {
-		log.Fatalf("failed to schedule cron task for cleaning expired urls: %v", err)
+	if scErr := cs.ScheduleInterval(
+		ctx,
+		cleanExpURLsTask,
+		5*time.Minute, //nolint:mnd // TODO Hardcoded, could move to config.
+	); scErr != nil {
+		log.Fatalf("failed to schedule cron task for cleaning expired urls: %v", scErr)
 	}
 
 	// Using run.Group handle startup and graceful shutdown. pretti usful.
@@ -146,8 +149,8 @@ func main() {
 	g.Add(func() error {
 		l.Info("starting echo server", "address", cfg.HTTP.Addr())
 
-		if err := cs.Start(ctx); err != nil {
-			return err
+		if csErr := cs.Start(ctx); csErr != nil {
+			return csErr
 		}
 
 		return e.Start(cfg.HTTP.Addr())
@@ -188,7 +191,9 @@ func main() {
 		<-ctx.Done()
 		return nil
 	}, func(error) {
-		if cErr := cr.CloseWithTimeout(30 * time.Second); cErr != nil {
+		if cErr := cr.CloseWithTimeout(
+			30 * time.Second, //nolint:mnd // TODO Could also make configurable.
+		); cErr != nil {
 			l.Warn("failed to close resources", "error", err)
 		}
 	})
@@ -347,7 +352,7 @@ func newEchoWebServer(
 	tracerServerName string,
 	shortenCHandler commands.ShortenURLCommandHandler,
 	redirectQHandler queries.RedirectQueryHandler,
-	getUrlInfoQHandler queries.GetURLInfoQueryHandler,
+	getURLInfoQHandler queries.GetURLInfoQueryHandler,
 ) *echo.Echo {
 	e := echo.New()
 
@@ -375,7 +380,7 @@ func newEchoWebServer(
 	handlers, err := http_inbound.NewServer(
 		shortenCHandler,
 		redirectQHandler,
-		getUrlInfoQHandler,
+		getURLInfoQHandler,
 	)
 	if err != nil {
 		log.Fatalf("error creating server: %v", err)

@@ -1,4 +1,3 @@
-// internal/pkg/scheduler/scheduler.go
 package scheduler
 
 import (

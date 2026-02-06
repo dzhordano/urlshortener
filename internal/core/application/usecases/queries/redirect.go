@@ -75,15 +75,20 @@ func (h *redirectQueryHandler) Handle(
 	// Otherwise, just log cache miss.
 	cachedVal, err := h.cache.Get(ctx, q.ShortURL)
 	span.AddEvent("retrieval from cache attempt performed")
-	if err != nil {
-		if errors.Is(err, errs.ErrObjectNotFound) {
-			h.log.Warn("value not found in cache", "short_url", q.ShortURL)
-		} else {
-			// Add any other error to span (since not expected)
-			span.RecordError(err)
-			h.log.Error("error getting url from cache", "error", err)
-		}
-	} else {
+
+	// Pretty fried nesting.
+	// Basically:
+	// Not found? -> log cache miss
+	// Any other error? -> log error
+	// No error and value is "" (caching absence of value)? -> return ""
+	// No error and valud is NOT ""? -> increment click and return it.
+	switch {
+	case err != nil && errors.Is(err, errs.ErrObjectNotFound):
+		h.log.Warn("value not found in cache", "short_url", q.ShortURL)
+	case err != nil:
+		span.RecordError(err)
+		h.log.Error("error getting url from cache", "error", err)
+	default:
 		if cachedVal == "" {
 			return RedirectResponse{}, errs.NewObjectNotFoundError("short url", q.ShortURL)
 		}

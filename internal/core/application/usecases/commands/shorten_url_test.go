@@ -22,7 +22,7 @@ func TestShortenURLCommandHandler_SuccessSaved(t *testing.T) {
 	rm := ports_mocks.NewURLRepositoryMock(t)
 	cm := ports_mocks.NewURLCacheMock(t)
 	l, err := logger.NewSlogLogger(true, "debug")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	rm.On("Save", mock.Anything, mock.Anything).Return(nil).Once()
 	cm.On("Set", mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(1)
@@ -43,7 +43,7 @@ func TestShortenURLCommandHandler_InvalidCommand(t *testing.T) {
 	rm := ports_mocks.NewURLRepositoryMock(t)
 	cm := ports_mocks.NewURLCacheMock(t)
 	l, err := logger.NewSlogLogger(true, "debug")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	ch, _ := NewShortenURLCommandHandler(l, cm, rm)
 	resp, err := ch.Handle(ctx, cmd)
@@ -61,7 +61,7 @@ func TestShortenURLCommandHandler_Internal(t *testing.T) {
 	rm := ports_mocks.NewURLRepositoryMock(t)
 	cm := ports_mocks.NewURLCacheMock(t)
 	l, err := logger.NewSlogLogger(true, "debug")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	rm.On("Save", mock.Anything, mock.Anything).Return(assert.AnError).Once()
 

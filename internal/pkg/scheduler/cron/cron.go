@@ -1,4 +1,3 @@
-// internal/pkg/scheduler/cron/cron.go
 package cron
 
 import (
@@ -11,38 +10,39 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-type CronScheduler struct {
+type Scheduler struct {
 	cron  *cron.Cron
 	log   logger.Logger
 	tasks map[string]cron.EntryID
 }
 
-func NewCronScheduler(log logger.Logger) *CronScheduler {
-	return &CronScheduler{
+func NewCronScheduler(log logger.Logger) scheduler.Scheduler {
+	return &Scheduler{
 		cron:  cron.New(),
 		log:   log,
 		tasks: make(map[string]cron.EntryID),
 	}
 }
 
-func (s *CronScheduler) Start(ctx context.Context) error {
+func (s *Scheduler) Start(_ context.Context) error {
 	s.log.Info("starting cron scheduler")
 	s.cron.Start()
 	return nil
 }
 
-func (s *CronScheduler) Stop(ctx context.Context) error {
+func (s *Scheduler) Stop(_ context.Context) error {
 	s.log.Info("stopping cron scheduler")
 	s.cron.Stop()
 	return nil
 }
 
 // ScheduleTask enqueues task for execution.
-func (s *CronScheduler) ScheduleTask(ctx context.Context, task scheduler.Task, schedule string) error {
+func (s *Scheduler) ScheduleTask(ctx context.Context, task scheduler.Task, schedule string) error {
 	entryID, err := s.cron.AddFunc(schedule, func() {
 		s.log.Info("executing scheduled task", "task_name", task.Name())
 
 		// timeout for task completion
+		//nolint:mnd // TODO Could make timeout for each task configurable.
 		taskCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer cancel()
 
@@ -61,13 +61,13 @@ func (s *CronScheduler) ScheduleTask(ctx context.Context, task scheduler.Task, s
 	return nil
 }
 
-func (s *CronScheduler) ScheduleInterval(ctx context.Context, task scheduler.Task, interval time.Duration) error {
+func (s *Scheduler) ScheduleInterval(ctx context.Context, task scheduler.Task, interval time.Duration) error {
 	// convert to cron time
 	schedule := fmt.Sprintf("@every %s", interval)
 	return s.ScheduleTask(ctx, task, schedule)
 }
 
-func (s *CronScheduler) RemoveTask(taskName string) {
+func (s *Scheduler) RemoveTask(taskName string) {
 	if entryID, ok := s.tasks[taskName]; ok {
 		s.cron.Remove(entryID)
 		delete(s.tasks, taskName)

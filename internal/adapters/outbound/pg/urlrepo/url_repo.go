@@ -40,7 +40,11 @@ func (r *Repository) Save(ctx context.Context, url *model.ShortenedURL) error {
 		VALUES ($1, $2, $3, $4, $5, $6)`,
 		urlsTable)
 
-	_, err := r.db.Exec(ctx, query, url.ID, url.OriginalURL, url.ShortURL, url.Clicks, url.CreatedAtUTC, url.ValidUntilUTC)
+	_, err := r.db.Exec(
+		ctx,
+		query,
+		url.ID, url.OriginalURL, url.ShortURL, url.Clicks, url.CreatedAtUTC, url.ValidUntilUTC,
+	)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
