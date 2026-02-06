@@ -3,6 +3,7 @@ package queries
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/dzhordano/urlshortener/internal/core/domain/model"
 	"github.com/dzhordano/urlshortener/internal/pkg/errs"
@@ -11,6 +12,29 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+type GetURLInfoQuery struct {
+	ShortURL string
+}
+
+func NewGetURLInfoQuery(shortURL string) (GetURLInfoQuery, error) {
+	if shortURL == "" {
+		return GetURLInfoQuery{}, errs.NewValueIsInvalidError("shortURL")
+	}
+
+	return GetURLInfoQuery{
+		ShortURL: shortURL,
+	}, nil
+}
+
+type GetURLInfoResponse struct {
+	ID            string
+	OriginalURL   string
+	ShortURL      string
+	Clicks        int
+	CreatedAtUTC  time.Time
+	ValidUntilUTC time.Time
+}
 
 type GetURLInfoQueryHandler interface {
 	Handle(context.Context, GetURLInfoQuery) (GetURLInfoResponse, error)
@@ -46,13 +70,19 @@ func (h *getURLInfoQueryHandler) Handle(
 	ctx, span := tracing.StartSpan(ctx, "GetURLInfoQueryHandler.Handle")
 	defer span.End()
 
-	query := `SELECT original_url, short_url, clicks, created_at_utc FROM urls WHERE short_url = $1`
+	// Get full url info using short url
+	query := `
+	SELECT id, original_url, short_url, clicks, created_at, valid_until 
+	FROM urls
+	WHERE short_url = $1`
 	var url model.ShortenedURL
 	err := h.db.QueryRow(ctx, query, q.ShortURL).Scan(
+		&url.ID,
 		&url.OriginalURL,
 		&url.ShortURL,
 		&url.Clicks,
 		&url.CreatedAtUTC,
+		&url.ValidUntilUTC,
 	)
 	span.AddEvent("url query db attempt performed")
 	if err != nil {
@@ -61,17 +91,19 @@ func (h *getURLInfoQueryHandler) Handle(
 			return GetURLInfoResponse{}, errs.NewObjectNotFoundError("short url", q.ShortURL)
 		}
 
-		h.log.Errorw("error getting url info", "error", err)
+		h.log.Error("error getting url info", "error", err)
 		return GetURLInfoResponse{}, err
 	}
 
 	span.AddEvent("url query db succeeded")
-	h.log.Debugw("url info", "url", url)
+	h.log.Debug("url info", "url", url)
 
 	return GetURLInfoResponse{
-		OriginalURL:  url.OriginalURL,
-		ShortURL:     url.ShortURL,
-		Clicks:       url.Clicks,
-		CreatedAtUTC: url.CreatedAtUTC,
+		ID:            url.ID.String(),
+		OriginalURL:   url.OriginalURL,
+		ShortURL:      url.ShortURL,
+		Clicks:        url.Clicks,
+		CreatedAtUTC:  url.CreatedAtUTC,
+		ValidUntilUTC: url.ValidUntilUTC,
 	}, nil
 }

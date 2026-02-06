@@ -14,7 +14,6 @@ WORKDIR /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 COPY --from=builder /build/api/openapi ./docs
-COPY --from=builder /build/main .
 COPY --from=builder --chown=appuser:appgroup --chmod=755 ./build/main ./main
 
 USER appuser

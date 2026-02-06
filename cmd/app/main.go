@@ -8,13 +8,15 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/dzhordano/urlshortener/cmd"
 	http_inbound "github.com/dzhordano/urlshortener/internal/adapters/inbound/httpinbound"
+	"github.com/dzhordano/urlshortener/internal/core/application/usecases/commands"
+	"github.com/dzhordano/urlshortener/internal/core/application/usecases/queries"
 	"github.com/dzhordano/urlshortener/internal/gen/servers"
+	"github.com/dzhordano/urlshortener/internal/pkg/logger"
 	"github.com/dzhordano/urlshortener/migrations"
 	echoPrometheus "github.com/globocom/echo-prometheus"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,11 +33,11 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.9.0"
-	"go.uber.org/zap"
 )
 
 //nolint:gocognit,funlen // TODO For now suppress, but actually must be optimized.
@@ -43,41 +45,46 @@ func main() {
 	// Load .env file.
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatalf("error loading .env file: %v", err)
+		log.Printf("failed to load .env file: %v", err)
 	}
 
 	// Load config.
 	cfg := mustLoadFromEnv()
 
-	var zl *zap.Logger
-	if cfg.Environment != cmd.EnvironmentProduction {
-		zl, err = zap.NewDevelopment(
-			zap.Development(),
-			zap.AddCaller(),
-			zap.AddStacktrace(zap.ErrorLevel),
-		)
-	} else {
-		zl, err = zap.NewProduction()
-	}
-	if err != nil {
-		log.Fatalf("error creating zap logger: %v", err)
+	// Handling log level using env, not cool.
+	ifDev := cfg.Environment == "dev"
+	var logLevel string
+	switch cfg.Environment {
+	case "dev":
+		logLevel = "debug"
+	case "prod":
+		logLevel = "error"
+	default:
+		logLevel = "info"
 	}
 
-	// Sugarizze.
-	zsl := zl.Named(cfg.ServiceName).Sugar()
-	zsl.Infow("logger setup completed", "environment", cfg.Environment)
+	l, err := logger.NewSlogLogger(ifDev, logLevel)
+	if err != nil {
+		log.Fatalf("failed to init slog logger: %v", err)
+	}
+
+	cr := cmd.NewCompositionRoot(l, cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	pool, err := newPgxPool(ctx, cfg.DB.DSN())
 	if err != nil {
-		zsl.Panicf("error creating pgxpool: %v", err)
+		log.Fatalf("error creating pgxpool: %v", err)
 	}
+	cr.RegisterCloseFn(func(ctx context.Context) error {
+		pool.Close()
+		return nil
+	})
 
 	// Open sql.DB for migration purposes.
 	db, err := sql.Open("postgres", cfg.DB.DSN())
 	if err != nil {
-		zsl.Panicf("error opening sql.DB: %v", err)
+		log.Fatalf("error opening sql.DB: %v", err)
 	}
 
 	// Set migrations FS for goose.
@@ -86,37 +93,73 @@ func main() {
 	// Apply migrations
 	gooseMigrate(db, ".")
 	if err = db.Close(); err != nil {
-		zsl.Warnf("error closing sql.DB: %v", err)
+		l.Warn("error closing sql.DB", "error", err)
 	}
 
 	rdb := newRedisClient(cfg.RDB.Addr(), cfg.RDB.Password)
+	cr.RegisterCloseFn(func(ctx context.Context) error {
+		return rdb.Close()
+	})
 
-	cr := cmd.NewCompositionRoot(zsl, cfg, pool, rdb)
+	urlCache := cr.NewURLCache(rdb)
+	urlRepo := cr.NewURLRepository(pool)
 
 	// Init otel tracer.
 	tp, err := initTracer(ctx, cfg.ServiceName, cfg.JaegerURL, cfg.Environment)
 	if err != nil {
-		zsl.Panicf("error initializing tracer: %v", err)
+		log.Fatalf("error initializing tracer: %v", err)
+	}
+	cr.RegisterCloseFn(func(ctx context.Context) error {
+		return tp.Shutdown(ctx)
+	})
+
+	e := newEchoWebServer(
+		cfg.ServiceName,
+		cr.NewShortenURLCommandHandler(urlCache, urlRepo),
+		cr.NewRedirectQueryHandler(urlCache, pool),
+		cr.NewGetURLInfoQueryHandler(pool),
+	)
+
+	cs, err := cr.NewCronScheduler()
+	if err != nil {
+		log.Fatalf("failed to create cron scheduler: %v", err)
+	}
+	cr.RegisterCloseFn(func(ctx context.Context) error {
+		return cs.Stop(ctx)
+	})
+
+	cleanExpURLsTask, err := cr.NewCleanExpiredURLsCronTask(pool)
+	if err != nil {
+		log.Fatalf("failed to create cron task for cleaning expired urls: %v", err)
 	}
 
-	e := newEchoWebServer(cr, cfg.ServiceName)
+	// Schedule so cleaning happens every 5 minutes.
+	// TODO Hardcoded, could move to config.
+	if err := cs.ScheduleInterval(ctx, cleanExpURLsTask, 5*time.Minute); err != nil {
+		log.Fatalf("failed to schedule cron task for cleaning expired urls: %v", err)
+	}
 
 	// Using run.Group handle startup and graceful shutdown. pretti usful.
 	var g run.Group
 
-	// Run web server.
+	// Run app.
 	g.Add(func() error {
-		zsl.Infof("starting echo server on %s", cfg.HTTP.Addr())
+		l.Info("starting echo server", "address", cfg.HTTP.Addr())
+
+		if err := cs.Start(ctx); err != nil {
+			return err
+		}
+
 		return e.Start(cfg.HTTP.Addr())
 	}, func(error) {
-		zsl.Info("shutting down http server")
+		l.Info("shutting down http server")
 		//nolint:mnd // TODO Magic number ahead.
 		ctxShutdown, wsCancel := context.WithTimeout(ctx, 10*time.Second)
 		defer wsCancel()
 		if sdErr := e.Shutdown(ctxShutdown); sdErr != nil {
-			zsl.Warnf("echo graceful shutdown error: %v", sdErr)
+			l.Warn("failed to shutdown echo server", "error", sdErr)
 			if cErr := e.Close(); cErr != nil {
-				zsl.Warnf("echo close error: %v", cErr)
+				l.Warn("failed to close echo server", "error", cErr)
 			}
 		}
 	})
@@ -129,10 +172,10 @@ func main() {
 	g.Add(func() error {
 		select {
 		case sig := <-s:
-			zsl.Infof("received signal: %s", sig)
+			l.Info("received signal", "signal", sig)
 			return fmt.Errorf("received signal %s", sig)
 		case <-ctx.Done():
-			return nil
+			return ctx.Err()
 		}
 	}, func(error) {
 		cancel()
@@ -145,38 +188,14 @@ func main() {
 		<-ctx.Done()
 		return nil
 	}, func(error) {
-		zsl.Info("shutting down tracer provider")
-		if sdErr := tp.Shutdown(ctx); sdErr != nil {
-			zsl.Warnf("error shutting down tracer: %v", sdErr)
+		if cErr := cr.CloseWithTimeout(30 * time.Second); cErr != nil {
+			l.Warn("failed to close resources", "error", err)
 		}
-
-		if rdb != nil {
-			zsl.Info("closing redis client")
-			if err = rdb.Close(); err != nil {
-				zsl.Warnf("error closing redis client: %v", err)
-			}
-		}
-
-		if pool != nil {
-			zsl.Info("closing pgxpool")
-			pool.Close()
-		}
-
-		zsl.Info("syncing zap logger")
-		if err = zsl.Sync(); err != nil {
-			if !strings.Contains(err.Error(), "sync /dev/stdout") &&
-				!strings.Contains(err.Error(), "sync /dev/stderr") {
-				zsl.Warnf("zap sync error: %v", err)
-			}
-		}
-
-		zsl.Info("shutdown complete")
 	})
 
 	// Run everything.
 	if rgErr := g.Run(); rgErr != nil {
-		zsl.Errorf("error running group: %v", rgErr)
-		os.Exit(1)
+		l.Warn("run group stopped", "error", rgErr)
 	}
 }
 
@@ -325,8 +344,10 @@ func initTracer(
 }
 
 func newEchoWebServer(
-	cr *cmd.CompositionRoot,
 	tracerServerName string,
+	shortenCHandler commands.ShortenURLCommandHandler,
+	redirectQHandler queries.RedirectQueryHandler,
+	getUrlInfoQHandler queries.GetURLInfoQueryHandler,
 ) *echo.Echo {
 	e := echo.New()
 
@@ -352,9 +373,9 @@ func newEchoWebServer(
 	)
 
 	handlers, err := http_inbound.NewServer(
-		cr.NewShortenURLCommandHandler(),
-		cr.NewRedirectQueryHandler(),
-		cr.NewGetURLInfoQueryHandler(),
+		shortenCHandler,
+		redirectQHandler,
+		getUrlInfoQHandler,
 	)
 	if err != nil {
 		log.Fatalf("error creating server: %v", err)

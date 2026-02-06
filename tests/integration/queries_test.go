@@ -7,7 +7,6 @@ import (
 	"github.com/dzhordano/urlshortener/internal/core/application/usecases/queries"
 	"github.com/dzhordano/urlshortener/internal/core/domain/model"
 	"github.com/dzhordano/urlshortener/internal/pkg/errs"
-	"go.uber.org/zap/zaptest"
 )
 
 func (s *Suite) TestGetURLInfoQueryHandler_Found() {
@@ -26,8 +25,7 @@ func (s *Suite) TestGetURLInfoQueryHandler_Found() {
 	err := s.urlRepo.Save(ctx, shortenedURL)
 	s.Require().NoError(err)
 
-	handler, err := queries.NewGetURLInfoQueryHandler(
-		zaptest.NewLogger(s.T()).Sugar(), s.pgxPool)
+	handler, err := queries.NewGetURLInfoQueryHandler(s.l, s.pgxPool)
 	s.Require().NoError(err)
 
 	resp, err := handler.Handle(ctx, query)
@@ -56,8 +54,7 @@ func (s *Suite) TestGetURLInfoQueryHandler_NotFound() {
 		ShortURL: "SOMEURL",
 	}
 
-	handler, err := queries.NewGetURLInfoQueryHandler(
-		zaptest.NewLogger(s.T()).Sugar(), s.pgxPool)
+	handler, err := queries.NewGetURLInfoQueryHandler(s.l, s.pgxPool)
 	s.Require().NoError(err)
 
 	resp, handlerErr := handler.Handle(ctx, query)
@@ -86,8 +83,7 @@ func (s *Suite) TestRedirect_Found() {
 	err := s.urlRepo.Save(ctx, shortenedURL)
 	s.Require().NoError(err)
 
-	handler, err := queries.NewRedirectQueryHandler(
-		zaptest.NewLogger(s.T()).Sugar(), s.cache, s.pgxPool)
+	handler, err := queries.NewRedirectQueryHandler(s.l, s.cache, s.pgxPool)
 	s.Require().NoError(err)
 
 	resp, err := handler.Handle(ctx, query)
@@ -112,8 +108,7 @@ func (s *Suite) TestRedirect_NotFound() {
 		ShortURL: "SOMEURL",
 	}
 
-	handler, err := queries.NewRedirectQueryHandler(
-		zaptest.NewLogger(s.T()).Sugar(), s.cache, s.pgxPool)
+	handler, err := queries.NewRedirectQueryHandler(s.l, s.cache, s.pgxPool)
 	s.Require().NoError(err)
 
 	resp, handlerErr := handler.Handle(ctx, query)

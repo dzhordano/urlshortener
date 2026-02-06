@@ -3,7 +3,6 @@ package commands
 
 import (
 	"context"
-	"errors"
 
 	"github.com/dzhordano/urlshortener/internal/core/domain/model"
 	"github.com/dzhordano/urlshortener/internal/core/ports"
@@ -11,6 +10,18 @@ import (
 	"github.com/dzhordano/urlshortener/internal/pkg/logger"
 	"github.com/dzhordano/urlshortener/internal/pkg/tracing"
 )
+
+type ShortenURLCommand struct {
+	OriginalURL string
+}
+
+func NewShortenURLCommand(url string) (ShortenURLCommand, error) {
+	if url == "" {
+		return ShortenURLCommand{}, errs.NewValueIsInvalidError("url")
+	}
+
+	return ShortenURLCommand{OriginalURL: url}, nil
+}
 
 type ShortenURLCommandHandler interface {
 	Handle(context.Context, ShortenURLCommand) (string, error)
@@ -56,43 +67,34 @@ func (h *shortenURLCommandHandler) Handle(
 	url, err := model.NewShortenedURL(cmd.OriginalURL)
 	if err != nil {
 		span.RecordError(err)
-		h.log.Errorw("error creating new shortened url", "error", err)
+		h.log.Error("error creating new shortened url", "error", err)
 		return "", err
 	}
 
 	span.AddEvent("shortened url created")
-	h.log.Debugw("shortened url", "short_url", url.ShortURL)
+	h.log.Debug("shortened url", "short_url", url.ShortURL)
 
+	// If shortened url will contain non-unique short url (collision)
+	// this will result in an error (unique constraint) because no retry logic :p.
 	err = h.urlRepo.Save(ctx, url)
 	span.AddEvent("shortened url save attempt performed")
 	if err != nil {
-		if !errors.Is(err, errs.ErrObjectAlreadyExists) {
-			span.RecordError(err)
-			h.log.Errorw("error saving url", "error", err)
-			return "", err
-		}
-
-		span.AddEvent("shortened url already exists")
-		h.log.Debugw("url already exists", "url", url)
-
-		url, err = h.urlRepo.GetByOriginalURL(ctx, url.OriginalURL)
-		if err != nil {
-			span.RecordError(err)
-			return "", err
-		}
+		span.RecordError(err)
+		h.log.Error("error saving url", "error", err)
+		return "", err
 	}
 
 	span.AddEvent("shortened url saved or retrieved from db")
-	h.log.Debugw("url saved or found in db", "url", url)
+	h.log.Debug("url saved or found in db", "url", url)
 
 	err = h.cache.Set(ctx, url.ShortURL, url.OriginalURL)
 	if err != nil {
 		span.RecordError(err)
-		h.log.Errorw("error saving url to cache", "error", err)
+		h.log.Error("error saving url to cache", "error", err)
 	}
 
 	span.AddEvent("shortened url saved")
-	h.log.Debugw("short url saved to cache", "short_url", url.ShortURL)
+	h.log.Debug("short url saved to cache", "short_url", url.ShortURL)
 
 	return url.ShortURL, nil
 }

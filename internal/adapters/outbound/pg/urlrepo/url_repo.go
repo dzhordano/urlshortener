@@ -35,10 +35,12 @@ func NewRepository(db *pgxpool.Pool) (ports.URLRepository, error) {
 func (r *Repository) Save(ctx context.Context, url *model.ShortenedURL) error {
 	const op = "UrlRepo.Save"
 
-	query := fmt.Sprintf(`INSERT INTO %s (original_url, short_url, clicks, created_at_utc)
-	VALUES ($1, $2, $3, $4)`, urlsTable)
+	query := fmt.Sprintf(
+		`INSERT INTO %s (id, original_url, short_url, clicks, created_at, valid_until)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		urlsTable)
 
-	_, err := r.db.Exec(ctx, query, url.OriginalURL, url.ShortURL, url.Clicks, url.CreatedAtUTC)
+	_, err := r.db.Exec(ctx, query, url.ID, url.OriginalURL, url.ShortURL, url.Clicks, url.CreatedAtUTC, url.ValidUntilUTC)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
@@ -61,16 +63,20 @@ func (r *Repository) GetByShortenedURL(
 	const op = "UrlRepo.GetByShortenedURL"
 
 	query := fmt.Sprintf(
-		`SELECT original_url, short_url, clicks, created_at_utc FROM %s WHERE short_url = $1`,
+		`SELECT id, original_url, short_url, clicks, created_at, valid_until
+		FROM %s
+		WHERE short_url = $1`,
 		urlsTable,
 	)
 
 	var url model.ShortenedURL
 	err := r.db.QueryRow(ctx, query, shortenedURL).Scan(
+		&url.ID,
 		&url.OriginalURL,
 		&url.ShortURL,
 		&url.Clicks,
 		&url.CreatedAtUTC,
+		&url.ValidUntilUTC,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -93,16 +99,20 @@ func (r *Repository) GetByOriginalURL(
 	const op = "UrlRepo.GetByShortenedURL"
 
 	query := fmt.Sprintf(
-		`SELECT original_url, short_url, clicks, created_at_utc FROM %s WHERE original_url = $1`,
+		`SELECT id, original_url, short_url, clicks, created_at, valid_until
+		FROM %s
+		WHERE original_url = $1`,
 		urlsTable,
 	)
 
 	var url model.ShortenedURL
 	err := r.db.QueryRow(ctx, query, originalURL).Scan(
+		&url.ID,
 		&url.OriginalURL,
 		&url.ShortURL,
 		&url.Clicks,
 		&url.CreatedAtUTC,
+		&url.ValidUntilUTC,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

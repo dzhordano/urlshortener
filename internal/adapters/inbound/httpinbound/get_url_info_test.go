@@ -35,10 +35,11 @@ func TestServer_GetShortenedURLInfo(t *testing.T) {
 			mockBehavior: func(m *queries_mocks.GetURLInfoQueryHandlerMock, q queries.GetURLInfoQuery) {
 				m.On("Handle", mock.Anything, q).
 					Return(queries.GetURLInfoResponse{
-						OriginalURL:  "",
-						ShortURL:     "",
-						Clicks:       0,
-						CreatedAtUTC: time.Time{},
+						OriginalURL:   "",
+						ShortURL:      "",
+						Clicks:        0,
+						CreatedAtUTC:  time.Time{},
+						ValidUntilUTC: time.Time{},
 					}, nil).
 					Once()
 			},

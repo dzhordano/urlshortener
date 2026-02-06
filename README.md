@@ -2,9 +2,9 @@
 
 Basically, it is somewhat of a URL shortener.
 
-## run 
+## run
 
-**prerequisites**:  
+**prerequisites**:
 
 - Docker (docker compose)
 - Go 1.25.4
@@ -14,16 +14,10 @@ Basically, it is somewhat of a URL shortener.
 
 http docs are in `/api` dir
 
-#### todos and possible improvements
+### some obvious improvements
 
-- `_test` postfix in test files (increasing some tech debt here)
-- http server configuration (and impl https i guess)
-- graceful shutdown (improve timeouts and health checks?)
-- postgres setup (and redis?)
-- possibility to run profiler
-- cors issue with swagger ui (specifically the 'redirect' method)
-- grafana dashboards are kind of bad ;_;
-
-#### some faq
-
-- linter `exhaustruct` and `testpackage` in test files are suppressed (annoying ashell)
+- making so shortened url info is shown to its creator only (just 'admin' api key header rn)
+- more tests
+- better lifecycle and app configuration (better configs, timeouts, shutdown, etc.)
+- adding profiling
+- redirect method via swagger doesn't work

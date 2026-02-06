@@ -9,6 +9,7 @@ import (
 	"github.com/dzhordano/urlshortener/internal/adapters/outbound/pg/urlrepo"
 	"github.com/dzhordano/urlshortener/internal/adapters/outbound/redis/urlcache"
 	"github.com/dzhordano/urlshortener/internal/core/ports"
+	"github.com/dzhordano/urlshortener/internal/pkg/logger"
 	"github.com/dzhordano/urlshortener/migrations"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
@@ -26,6 +27,8 @@ type Suite struct {
 	pgContainer    *postgres.PostgresContainer
 	redisContainer *tcredis.RedisContainer
 
+	l logger.Logger
+
 	pgxPool *pgxpool.Pool
 	redisDB *redis.Client
 
@@ -40,6 +43,9 @@ func (s *Suite) SetupSuite() {
 	}()
 
 	ctx := context.Background()
+
+	l, err := logger.NewSlogLogger(true, "debug")
+	s.Require().NoError(err)
 
 	// Init postgres container
 	postgresContainer, err := postgres.Run(ctx,
@@ -111,6 +117,7 @@ func (s *Suite) SetupSuite() {
 	// Set suite values
 	s.pgContainer = postgresContainer
 	s.redisContainer = redisContainer
+	s.l = l
 	s.pgxPool = pool
 	s.redisDB = rdb
 	s.urlRepo = urlRepo

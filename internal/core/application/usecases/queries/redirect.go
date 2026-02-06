@@ -12,6 +12,24 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type RedirectQuery struct {
+	ShortURL string
+}
+
+func NewRedirectQuery(shortURL string) (RedirectQuery, error) {
+	if shortURL == "" {
+		return RedirectQuery{}, errs.NewValueIsInvalidError("shortURL")
+	}
+
+	return RedirectQuery{
+		ShortURL: shortURL,
+	}, nil
+}
+
+type RedirectResponse struct {
+	OriginalURL string
+}
+
 type RedirectQueryHandler interface {
 	Handle(context.Context, RedirectQuery) (RedirectResponse, error)
 }
@@ -53,40 +71,59 @@ func (h *redirectQueryHandler) Handle(
 	ctx, span := tracing.StartSpan(ctx, "GetURLInfoQueryHandler.Handle")
 	defer span.End()
 
+	// Get shortened url from cache and if found - increment clicks in db.
+	// Otherwise, just log cache miss.
 	cachedVal, err := h.cache.Get(ctx, q.ShortURL)
 	span.AddEvent("retrieval from cache attempt performed")
 	if err != nil {
-		if !errors.Is(err, errs.ErrObjectNotFound) {
+		if errors.Is(err, errs.ErrObjectNotFound) {
+			h.log.Warn("value not found in cache", "short_url", q.ShortURL)
+		} else {
 			// Add any other error to span (since not expected)
 			span.RecordError(err)
-			h.log.Errorw("error getting url from cache", "error", err)
-		} else {
-			h.log.Warnw("value not found in cache", "short_url", q.ShortURL)
+			h.log.Error("error getting url from cache", "error", err)
 		}
 	} else {
-		span.AddEvent("value found in cache")
 		if cachedVal == "" {
 			return RedirectResponse{}, errs.NewObjectNotFoundError("short url", q.ShortURL)
 		}
 
-		h.log.Debugw("value found in cache", "short_url", q.ShortURL)
+		// Increment url clicks here.
+		query := `
+		UPDATE urls
+		SET clicks = clicks + 1
+		WHERE short_url = $1`
+		_, err = h.db.Exec(ctx, query, q.ShortURL)
+		if err != nil {
+			// record since it's unexpected to happen
+			span.RecordError(err)
+			h.log.Warn("failed to increment clicks", "short_url", q.ShortURL)
+		}
+
+		h.log.Debug("value found in cache", "short_url", q.ShortURL)
 		return RedirectResponse{OriginalURL: cachedVal}, nil
 	}
 
-	query := `UPDATE urls SET clicks = clicks + 1 WHERE short_url = $1 RETURNING original_url`
+	// Update value if url's still valid and return it's original url.
+	query := `
+	UPDATE urls 
+	SET clicks = clicks + 1
+	WHERE short_url = $1 AND valid_until > NOW()
+	RETURNING original_url`
+
 	var originalURL string
 	err = h.db.QueryRow(ctx, query, q.ShortURL).Scan(&originalURL)
 	span.AddEvent("retrieval from db attempt performed")
 	if err != nil {
 		span.RecordError(err)
-		h.log.Errorw("error getting original url", "error", err)
+		h.log.Error("error getting original url", "error", err)
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Still cache nil result
 			err = h.cache.Set(ctx, q.ShortURL, "")
 			span.AddEvent("attempted to save empty value in cache")
 			if err != nil {
 				span.RecordError(err)
-				h.log.Errorw("error saving url to cache", "error", err)
+				h.log.Error("error saving url to cache", "error", err)
 			}
 
 			return RedirectResponse{}, errs.NewObjectNotFoundError("short url", q.ShortURL)
@@ -96,13 +133,14 @@ func (h *redirectQueryHandler) Handle(
 	}
 
 	span.AddEvent("url found in db or cache")
-	h.log.Debugw("got original url", "original_url", originalURL)
+	h.log.Debug("got original url", "original_url", originalURL)
 
+	// Cache value for faster next retrieval.
 	err = h.cache.Set(ctx, q.ShortURL, originalURL)
 	span.AddEvent("attempted to save new value in cache")
 	if err != nil {
 		span.RecordError(err)
-		h.log.Errorw("error saving url to cache", "error", err)
+		h.log.Error("error saving url to cache", "error", err)
 	}
 
 	span.AddEvent("value retrieved and saved to cache successfully")
