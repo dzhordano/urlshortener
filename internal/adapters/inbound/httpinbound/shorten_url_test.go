@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/dzhordano/urlshortener/internal/core/application/usecases/commands"
-	"github.com/dzhordano/urlshortener/internal/gen/servers"
+	"github.com/dzhordano/urlshortener/internal/pkg/gen/servers"
 	commands_mocks "github.com/dzhordano/urlshortener/mocks/core/application_mocks/commands"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"

@@ -1,5 +1,5 @@
 package: servers
-output: internal/gen/servers/servers.go
+output: internal/pkg/gen/servers/servers.go
 generate:
   - types
   - echo-server

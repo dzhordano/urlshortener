@@ -3,8 +3,8 @@ package httpinbound
 import (
 	"github.com/dzhordano/urlshortener/internal/core/application/usecases/commands"
 	"github.com/dzhordano/urlshortener/internal/core/application/usecases/queries"
-	"github.com/dzhordano/urlshortener/internal/gen/servers"
 	"github.com/dzhordano/urlshortener/internal/pkg/errs"
+	"github.com/dzhordano/urlshortener/internal/pkg/gen/servers"
 )
 
 var _ servers.ServerInterface = (*Server)(nil)

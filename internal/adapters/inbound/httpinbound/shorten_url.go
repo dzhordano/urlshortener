@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/dzhordano/urlshortener/internal/core/application/usecases/commands"
-	"github.com/dzhordano/urlshortener/internal/gen/servers"
+	"github.com/dzhordano/urlshortener/internal/pkg/gen/servers"
 	"github.com/labstack/echo/v4"
 )
 

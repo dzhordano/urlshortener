@@ -52,12 +52,12 @@ services:
   jaeger:
     container_name: urlshortener_jaeger
     hostname: jaeger
-    image: jaegertracing/jaeger:2.13.0
+    image: jaegertracing/jaeger:2.14.1
     ports:
       - "16686:16686" # UI
-      - "4318:4318"   # HTTP OTLP Collector
+      - "4318:4318" # HTTP OTLP Collector
     environment:
-      COLLECTOR_OLTP_ENABLED: true
+      COLLECTOR_OTLP_ENABLED: true
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:16687/"]
       interval: 30s

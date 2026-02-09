@@ -15,7 +15,7 @@ import (
 	http_inbound "github.com/dzhordano/urlshortener/internal/adapters/inbound/httpinbound"
 	"github.com/dzhordano/urlshortener/internal/core/application/usecases/commands"
 	"github.com/dzhordano/urlshortener/internal/core/application/usecases/queries"
-	"github.com/dzhordano/urlshortener/internal/gen/servers"
+	"github.com/dzhordano/urlshortener/internal/pkg/gen/servers"
 	"github.com/dzhordano/urlshortener/internal/pkg/logger"
 	"github.com/dzhordano/urlshortener/migrations"
 	echoPrometheus "github.com/globocom/echo-prometheus"
